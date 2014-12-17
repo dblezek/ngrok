@@ -2,6 +2,7 @@
 package web
 
 import (
+	"encoding/json"
 	"github.com/gorilla/websocket"
 	"net/http"
 	"ngrok/client/assets"
@@ -10,6 +11,7 @@ import (
 	"ngrok/proto"
 	"ngrok/util"
 	"path"
+	metrics "github.com/rcrowley/go-metrics"
 )
 
 type WebView struct {
@@ -63,6 +65,69 @@ func NewWebView(ctl mvc.Controller, addr string) *WebView {
 			return
 		}
 		w.Write(buf)
+	})
+
+	http.HandleFunc("/rest/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		j := make(map[string]interface{})
+		j["tunnels"] = ctl.State().GetTunnels()
+		j["client_version"] = ctl.State().GetClientVersion()
+		j["server_version"] = ctl.State().GetServerVersion()
+		j["connection_status"] = ctl.State().GetConnStatus()
+
+		values := make(map[string]interface{})
+		// Metrics
+		meter,_ := ctl.State().GetConnectionMetrics()
+		m := meter.Snapshot()
+		values["count"] = m.Count()
+		values["1m.rate"] = m.Rate1()
+		values["5m.rate"] = m.Rate5()
+		values["15m.rate"] = m.Rate15()
+		values["mean.rate"] = m.RateMean()
+		j["connection_metrics"] = values
+
+		var counter metrics.Counter
+		var histogram metrics.Histogram
+
+		values = make(map[string]interface{})
+		counter, histogram = ctl.State().GetBytesInMetrics()
+		values["count"] = counter.Count()
+		h := histogram.Snapshot()
+		ps := h.Percentiles([]float64{0.5, 0.75, 0.95, 0.99, 0.999})
+		values["min"] = h.Min()
+		values["max"] = h.Max()
+		values["mean"] = h.Mean()
+		values["stddev"] = h.StdDev()
+		values["median"] = ps[0]
+		values["75%"] = ps[1]
+		values["95%"] = ps[2]
+		values["99%"] = ps[3]
+		values["99.9%"] = ps[4]
+		j["bytes_in"] = values
+
+		values = make(map[string]interface{})
+		counter,histogram = ctl.State().GetBytesOutMetrics()
+		values["count"] = counter.Count()
+		h = histogram.Snapshot()
+		ps = h.Percentiles([]float64{0.5, 0.75, 0.95, 0.99, 0.999})
+		values["min"] = h.Min()
+		values["max"] = h.Max()
+		values["mean"] = h.Mean()
+		values["stddev"] = h.StdDev()
+		values["median"] = ps[0]
+		values["75%"] = ps[1]
+		values["95%"] = ps[2]
+		values["99%"] = ps[3]
+		values["99.9%"] = ps[4]
+		j["bytes_out"] = values
+
+		a, err := json.Marshal(j)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Write(a)
+		return
 	})
 
 	wv.Info("Serving web interface on %s", addr)
