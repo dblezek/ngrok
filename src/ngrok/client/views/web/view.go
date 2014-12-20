@@ -12,6 +12,7 @@ import (
 	"ngrok/util"
 	"path"
 	metrics "github.com/rcrowley/go-metrics"
+	"os"
 )
 
 type WebView struct {
@@ -67,7 +68,11 @@ func NewWebView(ctl mvc.Controller, addr string) *WebView {
 		w.Write(buf)
 	})
 
-	http.HandleFunc("/rest/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/rest/exit", func(w http.ResponseWriter, r *http.Request) {
+		os.Exit(1)
+	})
+
+	http.HandleFunc("/rest/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		j := make(map[string]interface{})
 		j["tunnels"] = ctl.State().GetTunnels()

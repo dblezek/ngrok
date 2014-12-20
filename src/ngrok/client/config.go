@@ -127,7 +127,7 @@ func LoadConfiguration(opts *Options) (config *Configuration, err error) {
 			if len(strings.Split(name, ".")) > 1 {
 				t.Hostname = name
 			} else {
-				t.Subdomain = name
+				t.Subdomain = ""
 			}
 		}
 	}
